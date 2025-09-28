@@ -1,6 +1,6 @@
 {
-  "name": "Music Player",
-  "short_name": "MusicPlayer",
+  "name": "TuneBud",
+  "short_name": "TuneBud",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#ffffff",
