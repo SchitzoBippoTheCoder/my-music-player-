@@ -1,0 +1,531 @@
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" href="icon-192.png" type="image/png" />
+    <meta name="theme-color" content="#4caf50" />
+
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"
+    />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Noto+Sans+Devanagari:wght@100..900&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+
+  <body>
+    <div id="musicList"></div>
+
+    <audio id="musicPlayer" onended="PlayNext()">
+      <source />
+    </audio>
+
+    <div id="appControls">
+      <p id="nowPlaying"></p>
+      <p id="time"></p>
+
+      <input type="range" min="1" max="1000" value="1" id="timeline" />
+
+      <div id="buttonPanel">
+        <span
+          class="material-symbols-outlined"
+          id="skipBackward"
+          onclick="PlayPrevious()"
+        >
+          skip_previous
+        </span>
+        <span
+          class="material-symbols-outlined"
+          id="playPause"
+          onclick="PlayPause()"
+        >
+          pause_circle
+        </span>
+        <span
+          class="material-symbols-outlined"
+          id="skipForward"
+          onclick="PlayNext()"
+        >
+          skip_next
+        </span>
+        <span
+          class="material-symbols-outlined"
+          id="shuffleButton"
+          onclick="ShuffleToggle()"
+        >
+          shuffle
+        </span>
+      </div>
+    </div>
+
+    <div id="uploadGroup">
+      <label for="musicUpload" class="customMusicUpload"> UPLOAD FOLDER </label>
+      <input
+        type="file"
+        id="musicUpload"
+        value="Upload Music"
+        webkitdirectory
+        directory
+        multiple
+      />
+    </div>
+  </body>
+</html>
+
+<script>
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("service-worker.js");
+  }
+
+  const musicUpload = document.getElementById("musicUpload");
+  const musicPlayer = document.getElementById("musicPlayer");
+  const musicList = document.getElementById("musicList");
+  const shuffleButton = document.getElementById("shuffleButton");
+  const timeline = document.getElementById("timeline");
+  const time = document.getElementById("time");
+  const playPauseButton = document.getElementById("playPause");
+
+  var tracks = [];
+  var trackSelection = 0;
+
+  var randomPlayed = [];
+
+  var shuffle = false;
+
+  musicUpload.addEventListener("change", (event) => {
+    const files = Array.from(event.target.files).filter((file) =>
+      file.type.startsWith("audio/")
+    );
+
+    tracks = files.map((file) => ({
+      name: file.name,
+      url: URL.createObjectURL(file),
+    }));
+
+    musicList.innerHTML = "";
+
+    for (let x = 0; x < tracks.length; x++) {
+      let musicOption = document.createElement("p");
+      musicOption.innerHTML = tracks[x].name;
+      musicOption.id = x;
+      musicOption.setAttribute("class", "musicOption");
+      musicOption.setAttribute("onclick", "Play(" + x + ")");
+
+      musicList.appendChild(musicOption);
+    }
+  });
+
+  const Play = function (x) {
+    playPauseButton.innerHTML = "pause_circle";
+
+    trackSelection = x;
+    musicPlayer.src = tracks[x].url;
+
+    musicPlayer.play();
+  };
+
+  const PlayNext = function () {
+    if (shuffle) {
+      if (randomPlayed.length >= tracks.length) {
+        randomTrack = [];
+      }
+
+      while (true) {
+        var randomTrack = Math.floor(Math.random() * tracks.length);
+
+        if (!randomPlayed.includes(randomTrack)) {
+          randomPlayed.push(randomTrack);
+          Play(randomTrack);
+          break;
+        }
+
+        if (randomPlayed.length >= tracks.length) {
+          randomPlayed = [trackSelection];
+          PlayNext();
+          break;
+        }
+      }
+    } else {
+      var nextTrack = trackSelection + 1;
+
+      if (nextTrack > tracks.length - 1) {
+        nextTrack = 0;
+      }
+
+      Play(nextTrack);
+    }
+  };
+
+  const PlayPrevious = function () {
+    var nextTrack = trackSelection - 1;
+
+    if (nextTrack < 0) {
+      nextTrack = tracks.length - 1;
+    }
+
+    Play(nextTrack);
+  };
+
+  const ShuffleToggle = function () {
+    shuffle = !shuffle;
+
+    if (shuffle) shuffleButton.innerHTML = "shuffle_on";
+    else shuffleButton.innerHTML = "shuffle";
+  };
+
+  const PlayPause = function () {
+    if (tracks.length <= 0) return;
+
+    if (musicPlayer.paused) {
+      musicPlayer.play();
+      playPauseButton.innerHTML = "pause_circle";
+    } else {
+      musicPlayer.pause();
+      playPauseButton.innerHTML = "play_circle";
+    }
+  };
+
+  let isSeeking = false;
+
+  function calculateTime(x) {
+    let hour = x / 3600;
+
+    let finalTime;
+
+    if (hour > 0) {
+      finalTime =
+        String(Math.trunc(hour)).padStart(2, "0") +
+        ":" +
+        String(Math.trunc((hour % 1) * 60)).padStart(2, "0") +
+        ":" +
+        String(Math.trunc((((hour % 1) * 60) % 1) * 60)).padStart(2, "0");
+    }
+
+    if (hour < 1 && finalTime != null) {
+      finalTime = finalTime.slice(3, finalTime.length);
+    }
+
+    return finalTime;
+  }
+
+  function updateSlider() {
+    if (!isSeeking && musicPlayer.duration) {
+      timeline.value = (musicPlayer.currentTime / musicPlayer.duration) * 1000;
+      time.innerHTML =
+        calculateTime(musicPlayer.currentTime) +
+        " / " +
+        calculateTime(musicPlayer.duration);
+    }
+    requestAnimationFrame(updateSlider); // schedule next frame
+  }
+
+  // Start the animation loop once
+  requestAnimationFrame(updateSlider);
+
+  timeline.addEventListener("mousedown", () => (isSeeking = true));
+  timeline.addEventListener("touchstart", () => (isSeeking = true));
+
+  timeline.addEventListener("mouseup", () => {
+    isSeeking = false;
+    musicPlayer.currentTime = (timeline.value / 1000) * musicPlayer.duration;
+  });
+
+  timeline.addEventListener("touchend", () => {
+    isSeeking = false;
+    musicPlayer.currentTime = (timeline.value / 1000) * musicPlayer.duration;
+  });
+
+  setInterval(function () {
+    if (musicPlayer.src != null) {
+      document.getElementById("nowPlaying").innerHTML =
+        tracks[trackSelection].name;
+    }
+  }, 500);
+</script>
+
+<style>
+  article,
+  aside,
+  details,
+  figcaption,
+  figure,
+  footer,
+  header,
+  hgroup,
+  menu,
+  nav,
+  section {
+    display: block;
+  }
+  body {
+    line-height: 1;
+  }
+  ol,
+  ul {
+    list-style: none;
+  }
+  blockquote,
+  q {
+    quotes: none;
+  }
+  blockquote:before,
+  blockquote:after,
+  q:before,
+  q:after {
+    content: "";
+    content: none;
+  }
+  table {
+    border-collapse: collapse;
+    border-spacing: 0;
+  }
+
+  #appControls {
+    visibility: visible;
+
+    margin: auto;
+    width: 85%;
+
+    text-align: center;
+  }
+
+  #buttonPanel {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    transform: translate(2vw);
+
+    padding-top: 3%;
+  }
+
+  #nowPlaying {
+    font-family: "Barlow Semi Condensed";
+    font-size: 1.5vh;
+    text-align: left;
+    margin-left: 1%;
+    margin-bottom: 5%;
+    margin-top: 5%;
+
+    height: 1.5vh;
+
+    overflow-y: scroll;
+  }
+
+  #nowPlaying::-webkit-scrollbar {
+    display: none; /* Hides the scrollbar */
+  }
+
+  #time {
+    font-family: "Barlow Semi Condensed";
+    font-size: 1.5vh;
+    text-align: left;
+    margin-left: 1%;
+    margin-bottom: 5%;
+  }
+
+  #timeline {
+    -webkit-appearance: none; /* Remove default styling for Webkit browsers */
+    width: 100%;
+    height: 8px; /* Adjust track height as needed */
+    background: #ddd; /* Track color */
+    border-radius: 5px; /* Round the track */
+
+    margin: auto;
+  }
+
+  #timeline::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 30px; /* Handle size */
+    height: 30px; /* Handle size */
+    background: #4caf50; /* Handle color */
+    border-radius: 50%; /* Makes the handle round */
+    cursor: pointer;
+  }
+
+  #musicList {
+    margin: auto;
+    margin-top: 5vh;
+    width: 85%;
+    height: 60vh;
+
+    overflow-y: scroll;
+  }
+
+  .musicOption {
+    display: flex;
+
+    height: 7%;
+    border-bottom-style: solid;
+    border-radius: 50%;
+    border-radius: 10px;
+
+    padding: 2%;
+
+    font-size: 1.75vh;
+    align-items: center;
+
+    margin-bottom: 0.1%;
+    margin-top: 0;
+
+    font-family: "Barlow Semi Condensed";
+  }
+
+  #playPause {
+    font-size: 8vh;
+  }
+
+  #skipForward {
+    font-size: 6vh;
+  }
+
+  #skipBackward {
+    font-size: 6vh;
+  }
+
+  #shuffleButton {
+    font-size: 3.5vh;
+  }
+
+  .barlow-semi-condensed-thin {
+    font-family: "Barlow Semi Condensed", sans-serif;
+    font-weight: 100;
+    font-style: normal;
+  }
+
+  .barlow-semi-condensed-extralight {
+    font-family: "Barlow Semi Condensed", sans-serif;
+    font-weight: 200;
+    font-style: normal;
+  }
+
+  .barlow-semi-condensed-light {
+    font-family: "Barlow Semi Condensed", sans-serif;
+    font-weight: 300;
+    font-style: normal;
+  }
+
+  .barlow-semi-condensed-regular {
+    font-family: "Barlow Semi Condensed", sans-serif;
+    font-weight: 400;
+    font-style: normal;
+  }
+
+  .barlow-semi-condensed-medium {
+    font-family: "Barlow Semi Condensed", sans-serif;
+    font-weight: 500;
+    font-style: normal;
+  }
+
+  .barlow-semi-condensed-semibold {
+    font-family: "Barlow Semi Condensed", sans-serif;
+    font-weight: 600;
+    font-style: normal;
+  }
+
+  .barlow-semi-condensed-bold {
+    font-family: "Barlow Semi Condensed", sans-serif;
+    font-weight: 700;
+    font-style: normal;
+  }
+
+  .barlow-semi-condensed-extrabold {
+    font-family: "Barlow Semi Condensed", sans-serif;
+    font-weight: 800;
+    font-style: normal;
+  }
+
+  .barlow-semi-condensed-black {
+    font-family: "Barlow Semi Condensed", sans-serif;
+    font-weight: 900;
+    font-style: normal;
+  }
+
+  .barlow-semi-condensed-thin-italic {
+    font-family: "Barlow Semi Condensed", sans-serif;
+    font-weight: 100;
+    font-style: italic;
+  }
+
+  .barlow-semi-condensed-extralight-italic {
+    font-family: "Barlow Semi Condensed", sans-serif;
+    font-weight: 200;
+    font-style: italic;
+  }
+
+  .barlow-semi-condensed-light-italic {
+    font-family: "Barlow Semi Condensed", sans-serif;
+    font-weight: 300;
+    font-style: italic;
+  }
+
+  .barlow-semi-condensed-regular-italic {
+    font-family: "Barlow Semi Condensed", sans-serif;
+    font-weight: 400;
+    font-style: italic;
+  }
+
+  .barlow-semi-condensed-medium-italic {
+    font-family: "Barlow Semi Condensed", sans-serif;
+    font-weight: 500;
+    font-style: italic;
+  }
+
+  .barlow-semi-condensed-semibold-italic {
+    font-family: "Barlow Semi Condensed", sans-serif;
+    font-weight: 600;
+    font-style: italic;
+  }
+
+  .barlow-semi-condensed-bold-italic {
+    font-family: "Barlow Semi Condensed", sans-serif;
+    font-weight: 700;
+    font-style: italic;
+  }
+
+  .barlow-semi-condensed-extrabold-italic {
+    font-family: "Barlow Semi Condensed", sans-serif;
+    font-weight: 800;
+    font-style: italic;
+  }
+
+  .barlow-semi-condensed-black-italic {
+    font-family: "Barlow Semi Condensed", sans-serif;
+    font-weight: 900;
+    font-style: italic;
+  }
+
+  input[type="file"] {
+    display: none; /* Hide the default input */
+  }
+
+  .customMusicUpload {
+    border: 1px solid #ccc;
+    display: block;
+    position: fixed;
+    cursor: pointer;
+    background-color: #f0f0f0;
+    border-radius: 4px;
+    font-family: "Barlow Semi Condensed";
+    font-size: 3vw;
+
+    padding-top: 1.5%;
+    text-align: center;
+
+    height: 5vw;
+    width: 30%;
+  }
+
+  #uploadGroup {
+    height: 5vw;
+    width: 30vw;
+
+    margin: auto;
+    margin-top: 3%;
+  }
+</style>
